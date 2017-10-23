@@ -1,14 +1,12 @@
 // index.js
-
 var express = require('express');
 var bodyParser = require('body-parser');
-var spawn = require('child_process').spawn;
-var _ = require('underscore');
+const ner = require('ner');
 
 var app = express();
 app.use(bodyParser.json({limit: '50mb'}));
 
-var port = process.argv[2] || 8008;
+var port = process.argv[2] || 9000;
 
 var server = app.listen(port, function () {
 		var host = server.address().address;
@@ -18,110 +16,23 @@ var server = app.listen(port, function () {
 });
 
 app.get('/', function (req, res) {
-		res.send('how dare you\n');
+		res.send(`Example CURL request: <br/><code>curl -XPOST -H "Content-type: application/json" -d "{\\"text\\":\\"Dada (/ˈdɑːdɑː/) or Dadaism was an art movement of the European avant-garde in the early 20th century, with early centers in Zürich, Switzerland at the Cabaret Voltaire (circa 1916); New York Dada began circa 1915,[1] and after 1920 Dada flourished in Paris. Developed in reaction to World War I, the Dada movement consisted of artists who rejected the logic, reason, and aestheticism of modern capitalist society, instead expressing nonsense, irrationality, and anti-bourgeois protest in their works.[2][3][4] The art of the movement spanned visual, literary, and sound media, including collage, sound poetry, cut-up writing, and sculpture. Dadaist artists expressed their discontent with violence, war, and nationalism, and maintained political affinities with the radical left.[5] Cover of the first edition of the publication Dada by Tristan Tzara; Zürich, 1917 There is no consensus on the origin of the movement's name; a common story is that the Austrian artist Richard Huelsenbeck plunged a knife at random into a dictionary, where it landed on dada, a colloquial French term for a hobby horse. Others note that it suggests the first words of a child, evoking a childishness and absurdity that appealed to the group. Still others speculate that the word might have been chosen to evoke a similar meaning (or no meaning at all) in any language, reflecting the movement's internationalism.[6] The roots of Dada lay in pre-war avant-garde. The term anti-art, a precursor to Dada, was coined by Marcel Duchamp around 1913 to characterize works which challenge accepted definitions of art.[7] Cubism and the development of collage and abstract art would inform the movement's detachment from the constraints of reality and convention. The work of French poets, Italian Futurists and the German Expressionists would influence Dada's rejection of the tight correlation between words and meaning.[8][9] Works such as Ubu Roi (1896) by Alfred Jarry, and the ballet Parade (1916–17) by Erik Satie would also be characterized as proto-Dadaist works.[10] The Dada movement's principles were first collected in Hugo Ball's Dada Manifesto in 1916. The Dadaist movement included public gatherings, demonstrations, and publication of art/literary journals; passionate coverage of art, politics, and culture were topics often discussed in a variety of media. Key figures in the movement included Hugo Ball, Marcel Duchamp, Emmy Hennings, Hans Arp, Raoul Hausmann, Hannah Höch, Johannes Baader, Tristan Tzara, Francis Picabia, Huelsenbeck, George Grosz, John Heartfield, Man Ray, Beatrice Wood, Kurt Schwitters, Hans Richter, and Max Ernst, among others. The movement influenced later styles like the avant-garde and downtown music movements, and groups including surrealism, nouveau réalisme, pop art and Fluxus.\\"}" 'http://localhost:9000/'</code><br/><br/>Results:<br/><code>{"LOCATION":["Zürich","Switzerland","New York Dada","Paris","Hugo Ball","Dada Manifesto","Hugo Ball"],"ORGANIZATION":["Tristan Tzara","Ubu Roi","Tristan Tzara"],"DATE":["20th century","1916","1915","1920","1917","1913","1916","1916"],"MONEY":[],"PERSON":["Zürich","Richard Huelsenbeck","Marcel Duchamp","Dada","Alfred Jarry","Erik Satie","Dada","Marcel Duchamp","Emmy Hennings","Hans Arp","Raoul Hausmann","Hannah Höch","Johannes Baader","Francis Picabia","Huelsenbeck","George Grosz","John Heartfield","Man Ray","Beatrice Wood","Kurt Schwitters","Hans Richter","Max Ernst"],"PERCENT":[],"TIME":[]}</code>`);
 });
 
-app.get('/ner', function (req, res) {
-		res.send('how dare you\n');
-});
-
-app.post('/ner', function(req, res) {
+app.post('/', function(req, res) {
 		var parsed = '';
-		var nerPort = req.body.port ? req.body.port : 9191;
-		var text = req.body.file.replace(/\n+/gm, function myFunc(x){return' ';});
-		var process = spawn('java', ['-cp', 'stanford-ner-with-classifier.jar', 'edu.stanford.nlp.ie.NERServer' ,'-port' ,nerPort ,'-client']);
-		
-		//when java server returns data
-		process.stdout.on('data', function (data) {
-				//ignore if 'Input' write file text to stream
-				if(String(data).indexOf('Input some text and press RETURN to NER tag it,  or just RETURN to finish.')==0){
-						process.stdin.write(text);
-						process.stdin.write('\n');
-						process.stdin.write('\n');
-						return;
-				}
-				//concat returned data
-				else if(String(data).length > 1){
-						parsed += String(data);
-						return;
-				}
-		});
+		var nerPort = 8000;
+		var text = req.body.text.replace(/\n+/gm, function myFunc(x){return' ';});
 
-		process.stdin.on('endData',function (data){
-				console.log('endData: '+data);
-		})
-
-		process.stderr.on('data', function (data) {
-		  console.log('stderr: ' + data);
-		});
-
-		//when process ends
-		process.on('close', function (code) {
-				console.log('stanford-ner process exited with code ' + code);
-				//return ner tags, after parsing
-				res.status(200).json({entities:parse(parsed)});
+		ner.get({
+			port:8000,
+			host:'localhost'
+		}, text, function(err, nerRes){
+			if (err){
+				res.status(500).json(err);
+				return false;
+			}
+			res.status(200).json(nerRes.entities);
 		});
 
 });
-
-var parse = function(parsed) {
-
-		var tokenized   = parsed.split(/\s/gmi);
-		var splitRegex  = new RegExp('(.+)/([A-Z]+)','g');
-
-		var tagged              = _.map(tokenized, function(token) {
-				var parts = new RegExp('(.+)/([A-Z]+)','g').exec(token);
-				if (parts) {
-						return {
-								w:      parts[1],
-								t:      parts[2]
-						}
-				}
-				return null;
-		});
-
-		tagged = _.compact(tagged);
-
-		// Now we extract the neighbors into one entity
-		var entities = {};
-		var i;
-		var l = tagged.length;
-		var prevEntity          = false;
-		var entityBuffer        = [];
-		for (i=0;i<l;i++) {
-				if (tagged[i].t != 'O') {
-						if (tagged[i].t != prevEntity) {
-								// New tag!
-								// Was there a buffer?
-								if (entityBuffer.length>0) {
-										// There was! We save the entity
-										if (!entities.hasOwnProperty(prevEntity)) {
-												entities[prevEntity] = [];
-										}
-										entities[prevEntity].push(entityBuffer.join(' '));
-										// Now we set the buffer
-										entityBuffer = [];
-								}
-								// Push to the buffer
-								entityBuffer.push(tagged[i].w);
-						} else {
-								// Prev entity is same a current one. We push to the buffer.
-								entityBuffer.push(tagged[i].w);
-						}
-				} else {
-						if (entityBuffer.length>0) {
-								// There was! We save the entity
-								if (!entities.hasOwnProperty(prevEntity)) {
-										entities[prevEntity] = [];
-								}
-								entities[prevEntity].push(entityBuffer.join(' '));
-								// Now we set the buffer
-								entityBuffer = [];
-						}
-				}
-				// Save the current entity
-				prevEntity = tagged[i].t;
-		}
-
-		return entities;
-}

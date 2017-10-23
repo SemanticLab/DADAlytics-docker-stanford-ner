@@ -1,20 +1,7 @@
 FROM openjdk:8-jre
 
-RUN curl -sL https://deb.nodesource.com/setup_6.x | bash -
-RUN apt-get install -y nodejs
-
-ADD index.js .
-ADD package.json .
-ADD lib/stanford-ner-with-classifier.jar .
-ADD lib/english.all.3class.distsim.crf.ser.gz .
-ADD lib/english.conll.4class.distsim.crf.ser.gz .
-ADD lib/english.muc.7class.distsim.crf.ser.gz .
-
-RUN npm install
-RUN npm install forever -g
-
-ADD start.sh .
-
-EXPOSE 8010
-
+RUN curl -sL https://deb.nodesource.com/setup_6.x | bash - && apt-get install -y nodejs
+ADD lib/stanford-ner.jar lib/english.all.3class.distsim.crf.ser.gz lib/english.conll.4class.distsim.crf.ser.gz lib/english.muc.7class.distsim.crf.ser.gz index.js package.json start.sh ./
+RUN npm install forever -g && npm install
+EXPOSE 9000
 CMD ["/bin/bash", "start.sh"]
